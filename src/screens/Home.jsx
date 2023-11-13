@@ -12,18 +12,20 @@ const RequestCard = ({
   riderName,
   destination,
   price,
+  location,
   declineCallback,
   acceptCallback,
 }) => {
   return (
     <div className="absolute z-50 h-screen top-0 left-0 w-full bg-neutral-900 opacity-95 flex justify-center items-center">
       <div className="w-[90%] h-[40%] bg-white px-5 py-5">
-        <h4 className="text-center text-2xl font-semibold">New Ride Request</h4>
+        <h4 className="text-center text-xl font-semibold">New Ride Request</h4>
         <div className="flex flex-col justify-center items-center mt-10">
-          <AiOutlineUser size={50} />
-          <h5 className="text-2xl font-semibold my-3">{riderName}</h5>
-          <p className="text-xl font-semibold">DROP OFF: {destination}</p>
-          <span className="text-xl font-medium">&#8358; {price}</span>
+          <AiOutlineUser size={40} />
+          <h5 className="text-xl font-semibold my-3">{riderName}</h5>
+          <p className="text-lg font-semibold">Drop off: {destination}</p>
+          <p className="text-lg font-semibold">Location: {location}</p>
+          <span className="text-lg font-medium">&#8358; {price}</span>
         </div>
         <div className="flex justify-between mt-6 gap-x-3 items-center">
           <button
@@ -40,6 +42,17 @@ const RequestCard = ({
           </button>
         </div>
       </div>
+    </div>
+  );
+};
+
+const DriverInfoCard = ({ driverName, driverNumber, driverPlate }) => {
+  return (
+    <div>
+      <h6>Customer's Info</h6>
+      {/* <AiOutlineUser size={28} /> */}
+      <p>{driverName}</p>
+      <p>{driverNumber}</p>
     </div>
   );
 };
@@ -96,6 +109,7 @@ const Home = () => {
       riderName: profile.full_name,
       destination: payload.destination,
       price: payload.price,
+      rider_location: payload.rider_location,
     };
     setRequest(reqInfo);
   };
@@ -124,9 +138,17 @@ const Home = () => {
       .eq("id", request.rideId);
     if (!ridesError) {
       setcurrentRide(rides[0]);
-      setRequest(null);
+      setIsRequestAvailable(false);
     }
 
+    const { data: customer, error: customerError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", rides[0].rider);
+
+    if (!customerError) {
+      setCustomersInfo(customer[0]);
+    }
     if (!error) {
       setIsRequestAvailable(false);
     }
@@ -139,6 +161,7 @@ const Home = () => {
   const [isrequestAvailable, setIsRequestAvailable] = useState(false);
   const [request, setRequest] = useState(null);
   const [currentRide, setcurrentRide] = useState(null);
+  const [customerInfo, setCustomersInfo] = useState(null);
 
   const onChange = async (e) => {
     const { error } = await supabase
@@ -154,7 +177,7 @@ const Home = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from("rides")
-        .update({ status: "picked-up" })
+        .update({ status: "arrived" })
         .eq("id", currentRide.id);
 
       if (!error) {
@@ -167,6 +190,25 @@ const Home = () => {
           console.log(currentRide);
         }
       }
+      setLoading(false);
+    } else if (currentRide.status === "arrived") {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("rides")
+        .update({ status: "picked-up" })
+        .eq("id", currentRide.id);
+      if (!error) {
+        const { data: rides, error: ridesError } = await supabase
+          .from("rides")
+          .select("*")
+          .eq("id", currentRide.id);
+        if (!ridesError) {
+          setcurrentRide(rides[0]);
+          setCustomersInfo();
+          console.log(currentRide);
+        }
+      }
+
       setLoading(false);
     } else if (currentRide.status === "picked-up") {
       setLoading(true);
@@ -181,6 +223,7 @@ const Home = () => {
           .eq("id", currentRide.id);
         if (!ridesError) {
           setcurrentRide(rides[0]);
+          setCustomersInfo();
           console.log(currentRide);
         }
       }
@@ -207,6 +250,7 @@ const Home = () => {
     } else if (currentRide.status === "completed") {
       setLoading(true);
       setcurrentRide(null);
+      setCustomersInfo(null);
       console.log(currentRide);
       setLoading(false);
     }
@@ -218,9 +262,19 @@ const Home = () => {
           riderName={request.riderName}
           destination={request.destination}
           price={request.price}
+          location={request.rider_location}
           declineCallback={declineCallback}
           acceptCallback={acceptCallback}
         />
+      )}
+
+      {customerInfo && (
+        <div className="absolute z-30 top-20 right-0 w-48 shadow-md bg-white rounded-sm p-2">
+          <DriverInfoCard
+            driverName={customerInfo.full_name}
+            driverNumber={customerInfo.phone_number}
+          />
+        </div>
       )}
       <div className="px-5 py-4 flex justify-between items-center">
         <button
@@ -249,7 +303,7 @@ const Home = () => {
       </div>
 
       <div className="h-[80%]">
-        <RideMap />
+        <RideMap request={request} />
       </div>
       <div className="h-[10%] flex justify-center items-center px-5">
         <button
@@ -263,6 +317,10 @@ const Home = () => {
             "You are offline"}
           {currentRide !== null &&
             currentRide.status === "on-route" &&
+            loading === false &&
+            "Arrived at Rider"}
+          {currentRide !== null &&
+            currentRide.status === "arrived" &&
             loading === false &&
             "Pick Up Rider"}
           {currentRide !== null &&
